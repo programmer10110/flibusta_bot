@@ -1,5 +1,6 @@
 import re
 import gzip
+import time
 import requests
 from download_counter import Counter
 import mysql.connector
@@ -20,6 +21,26 @@ def normal_name(first_name, middle_name, last_name):
     if middle_name:
         if last_name or first_name:
             temp += " " + middle_name
+        else:
+            temp = middle_name
+    if temp:
+        return temp
+    else:
+        return ''
+
+
+def short(last_name, first_name, middle_name):
+    temp = None
+    if last_name:
+        temp = last_name
+    if first_name:
+        if last_name:
+            temp += " " + first_name[0]
+        else:
+            temp = first_name
+    if middle_name:
+        if last_name or first_name:
+            temp += " " + middle_name[0]
         else:
             temp = middle_name
     if temp:
@@ -76,6 +97,7 @@ class Author:
     def __set_name(self):
         self.normal_name = normal_name(self.first_name, self.middle_name,
                                        self.last_name)
+        self.short = short(self.first_name, self.middle_name, self.last_name)
 
 
 class Library:
@@ -91,29 +113,11 @@ class Library:
                                            user=mysql_user,
                                            password=mysql_password)
             if conn.is_connected():
-                print('[FLIBUSTA] Connected to database!')
+                print('[{0}][FLIBUSTA] Connected to database!'.format(time.strftime("%H:%M:%S")))
         except Error as e:
             print(e)
         else:
             self.conn = conn
-
-    def update(self):
-        url = "http://flibusta.is/sql/"
-        files = ["lib.libavtor.sql",
-                 "lib.libavtoraliase.sql",
-                 "lib.libavtorname.sql",
-                 "lib.libbook.sql",
-                 "lib.libfilename.sql"]
-        for filename in files:
-            r = requests.get(url + filename + ".gz")
-            with open(filename + ".gz", "wb") as f:
-                f.write(r.content)
-            with gzip.open(filename + ".gz", "rb") as f:
-                unziped = f.read()
-            with open(filename, "wb") as f:
-                f.write(unziped)
-
-        self.__get_cursor()
 
     def downloaded(self, _id):
         self.counter.add(_id)
@@ -129,7 +133,7 @@ class Library:
         cursor = self.__get_cursor()
         cursor.execute(
             ("SELECT AvtorId FROM `libavtor` "
-             "WHERE BookId={0}").format(id_)
+             "WHERE BookId=%s"), (id_, )
         )
         author_id = cursor.fetchall()
         if author_id:
@@ -139,7 +143,7 @@ class Library:
         cursor = self.conn.cursor()
         cursor.execute(
             ("SELECT LastName, FirstName, MiddleName "
-             "FROM libavtorname WHERE AvtorId={0}").format(author_id[0])
+             "FROM libavtorname WHERE AvtorId=%s"), (author_id[0], )
         )
         author = cursor.fetchone()
         cursor.close()
@@ -148,7 +152,7 @@ class Library:
     def good_author_id(self, id_):
         cursor = self.conn.cursor()
         cursor.execute(
-            "SELECT * FROM `libavtoraliase` WHERE BadId={0}".format(id_)
+            "SELECT * FROM `libavtoraliase` WHERE BadId=%s", (id_, )
         )
         result = cursor.fetchall()
         cursor.close()
@@ -188,8 +192,8 @@ class Library:
         cursor = self.__get_cursor()
         cursor.execute(
             ("SELECT Title, Title1, Lang, BookId, FileType "
-             "FROM `libbook` WHERE BookId={0} AND Deleted=0 AND"
-             "(Lang='ru' OR Lang='uk' OR Lang='kk' OR Lang='be')").format(id_)
+             "FROM `libbook` WHERE BookId=%s AND Deleted=0 AND"
+             "(Lang='ru' OR Lang='uk' OR Lang='kk' OR Lang='be')"), (id_, )
         )
         book = cursor.fetchall()
         if book:
@@ -207,7 +211,7 @@ class Library:
     def __by_author_id(self, id_):
         cursor = self.__get_cursor()
         cursor.execute(
-            'SELECT BookId FROM `libavtor` WHERE AvtorId={0}'.format(id_)
+            'SELECT BookId FROM `libavtor` WHERE AvtorId=%s', (id_, )
         )
         book_ids = cursor.fetchall()
         cursor.close()
@@ -231,9 +235,9 @@ class Library:
         cursor.execute(
             ("SELECT Title, Title1, Lang, BookId, FileType FROM `libbook` "
              "WHERE MATCH (Title, Title1) "
-             """AGAINST ('"{0}"' IN BOOLEAN MODE) """
+             """AGAINST (%s IN BOOLEAN MODE) """
              "AND Deleted=0 AND "
-             "(Lang='ru' OR Lang='uk' OR Lang='kk' OR Lang='be')").format(title)
+             "(Lang='ru' OR Lang='uk' OR Lang='kk' OR Lang='be')"), (title, )
         )
         row = cursor.fetchall()
         cursor.close()
@@ -248,7 +252,7 @@ class Library:
             ("SELECT AvtorId, FirstName, MiddleName, LastName "
              "FROM `libavtorname` "
              "WHERE MATCH (FirstName, MiddleName, LastName) "
-             "AGAINST ('{0}' IN BOOLEAN MODE)").format(for_search(author))
+             "AGAINST (%s IN BOOLEAN MODE)"), (author, )
         )
         row = cursor.fetchall()
         cursor.close()
@@ -262,3 +266,10 @@ class Library:
 
     def search_by_author(self, id_):
         return self.__by_author_id(id_)
+
+    def get_author_by_book(self, id_):
+        author = self.get_author_info(id_)
+        if author:
+            return Author(id_, author[0], author[1], author[2])
+        else:
+            return None
