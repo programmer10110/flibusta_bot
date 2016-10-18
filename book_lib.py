@@ -1,12 +1,15 @@
-import re
-import gzip
 import time
-import requests
-from download_counter import Counter
 import mysql.connector
 from mysql.connector import Error
 
 from config import *
+
+
+def sort_by_alphabet(obj):
+    if obj.title:
+        return obj.title
+    else:
+        return None
 
 
 def normal_name(first_name, middle_name, last_name):
@@ -61,9 +64,7 @@ def for_search(arg):
 
 
 class Book:
-    def __init__(self, obj, counter):
-        self.counter = counter
-
+    def __init__(self, obj):
         self.last_name = obj[0]
         self.first_name = obj[1]
         self.middle_name = obj[2]
@@ -72,19 +73,8 @@ class Book:
         self.lang = obj[5]
         self.id_ = obj[6]
         self.file_type = obj[7]
-        self.s_names = '{0} {1} {2} {0} {2} {1} {0}'.format(obj[0].lower(),
-                                                            obj[1].lower(),
-                                                            obj[2].lower())
-        self.__set_name()
-
-    @property
-    def downloaded(self):
-        return self.counter.get(self.id_)
-
-    def __set_name(self):
         self.normal_name = normal_name(self.first_name, self.middle_name,
                                        self.last_name)
-
 
 class Author:
     def __init__(self, id_, first_name, middle_name, last_name):
@@ -92,18 +82,13 @@ class Author:
         self.first_name = first_name
         self.middle_name = middle_name
         self.last_name = last_name
-        self.__set_name()
-
-    def __set_name(self):
         self.normal_name = normal_name(self.first_name, self.middle_name,
                                        self.last_name)
         self.short = short(self.first_name, self.middle_name, self.last_name)
 
-
 class Library:
     def __init__(self):
-        from config import counter_name
-        self.counter = Counter(counter_name)
+        self.conn = None
         self.__connect()
 
     def __connect(self):
@@ -112,70 +97,33 @@ class Library:
                                            database=mysql_database,
                                            user=mysql_user,
                                            password=mysql_password)
-            if conn.is_connected():
-                print('[{0}][FLIBUSTA] Connected to database!'.format(time.strftime("%H:%M:%S")))
         except Error as e:
-            print(e)
+            time.sleep(0.01)
+            self.__connect()
         else:
             self.conn = conn
-
-    def downloaded(self, _id):
-        self.counter.add(_id)
 
     def __get_cursor(self):
         try:
             return self.conn.cursor()
-        except Error:
+        except Error as e:
             self.__connect()
             return self.__get_cursor()
-
-    def get_author_info(self, id_):
-        cursor = self.__get_cursor()
-        cursor.execute(
-            ("SELECT AvtorId FROM `libavtor` "
-             "WHERE BookId=%s"), (id_, )
-        )
-        author_id = cursor.fetchall()
-        if author_id:
-            author_id = author_id[0]
-        cursor.close()
-
-        cursor = self.conn.cursor()
-        cursor.execute(
-            ("SELECT LastName, FirstName, MiddleName "
-             "FROM libavtorname WHERE AvtorId=%s"), (author_id[0], )
-        )
-        author = cursor.fetchone()
-        cursor.close()
-        return author
-
-    def good_author_id(self, id_):
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "SELECT * FROM `libavtoraliase` WHERE BadId=%s", (id_, )
-        )
-        result = cursor.fetchall()
-        cursor.close()
-
-        if result:
-            return False
-        else:
-            return True
 
     def __processing_books(self, row):
         result = []
         for book in row:
             id_ = book[3]
             author = self.get_author_info(id_)
-            if author:
+            if author and not isinstance(author, Error):
                 result.append(
                     Book([author[0], author[1], author[2], book[0], book[1],
-                          book[2], book[3], book[4]], self.counter)
+                          book[2], book[3], book[4]])
                 )
             else:
                 result.append(
                     Book(['', '', '', book[0], book[1],
-                          book[2], book[3], book[4]], self.counter)
+                          book[2], book[3], book[4]])
                 )
         return result
 
@@ -188,76 +136,120 @@ class Library:
                 )
         return result
 
-    def get_book(self, id_):
-        cursor = self.__get_cursor()
-        cursor.execute(
-            ("SELECT Title, Title1, Lang, BookId, FileType "
-             "FROM `libbook` WHERE BookId=%s AND Deleted=0 AND"
-             "(Lang='ru' OR Lang='uk' OR Lang='kk' OR Lang='be')"), (id_, )
+    def fetchone(self, sql, args):
+    	cursor = self.__get_cursor()
+    	try:
+    		cursor.execute(sql, args)
+    		res = cursor.fetchone()
+    		cursor.close()
+    	except Error as e:
+    		return e
+    	else:
+    		return res
+
+    def fetchall(self, sql, args):
+    	cursor = self.__get_cursor()
+    	try:
+    		cursor.execute(sql, args)
+    		res = cursor.fetchall()
+    		cursor.close()
+    	except Error as e:
+    		return e
+    	else:
+    		return res 
+
+    def get_author_info(self, id_):
+        author_id = self.fetchone(
+                ("SELECT AvtorId FROM `libavtor` WHERE BookId=%s"), (id_, )
+            )
+        
+        if author_id and not isinstance(author_id, Error):
+            return self.fetchone(
+                    ("SELECT LastName, FirstName, MiddleName "
+                     "FROM libavtorname WHERE AvtorId=%s"), (author_id[0], )
+            	)
+
+    def good_author_id(self, id_):
+        result = self.fetchall(
+                "SELECT * FROM `libavtoraliase` WHERE BadId=%s", (id_, )
         )
-        book = cursor.fetchall()
-        if book:
-            book = book[0]
-            author = self.get_author_info(book[3])
-            if author:
-                return Book([author[0], author[1], author[2], book[0], book[1],
-                             book[2], book[3], book[4]], self.counter)
-            else:
-                return Book(['', '', '', book[0], book[1],
-                             book[2], book[3], book[4]], self.counter)
+        if result and not isinstance(result, Error):
+            return False
         else:
-            return None
+            return True
 
     def __by_author_id(self, id_):
-        cursor = self.__get_cursor()
-        cursor.execute(
-            'SELECT BookId FROM `libavtor` WHERE AvtorId=%s', (id_, )
-        )
-        book_ids = cursor.fetchall()
-        cursor.close()
-
-        books = []
-        if book_ids:
+        book_ids = self.fetchall(
+                'SELECT BookId FROM `libavtor` WHERE AvtorId=%s;', (id_, )
+            )
+        if book_ids and not isinstance(book_ids, Error):
+            books = []
             for book_id in [x[0] for x in book_ids]:
                 book = self.get_book(book_id)
                 if book:
                     books.append(book)
+            if books:
+                books.sort(key=sort_by_alphabet)
+                return books
+            else:
+                return None
+        else:
+        	return None
+
+    def get_book(self, id_):
+        book = self.fetchall(
+                ("SELECT Title, Title1, Lang, BookId, FileType "
+                 "FROM `libbook` WHERE BookId=%s"), (id_, )
+            )
+        if book and not isinstance(book, Error):
+            book = book[0]
+            author = self.get_author_info(book[3])
+            if author and not isinstance(author, Error):
+                return Book([author[0], author[1], author[2], book[0], book[1],
+                             book[2], book[3], book[4]])
+            else:
+                return Book(['', '', '', book[0], book[1],
+                             book[2], book[3], book[4]])
         else:
             return None
 
-        if books:
-            return books
+    def author_have_book(self, id_):
+    	return self.fetchone('SELECT count(*) FROM `libavtor` WHERE AvtorId=%s;',
+    					     (id_,)
+    		)
+
+
+    def search_authors(self, author):
+        row = self.fetchall(("SELECT AvtorId, FirstName, MiddleName, LastName "
+                 "FROM `libavtorname` "
+                 "WHERE MATCH (FirstName, MiddleName, LastName) "
+                 "AGAINST (%s IN BOOLEAN MODE)"), (for_search(author), )
+            )
+        if row and not isinstance(row, Error):
+            authors =  self.__processing_authors(row)
+            res = []
+            for aut in authors:
+            	hb = self.author_have_book(aut.id)
+            	if isinstance(hb, Error):
+            		res.append(aut)
+            	else:
+            		if hb[0] > 0:
+            			res.append(aut)
+            if res:
+            	return res
+            else:
+            	return None
         else:
             return None
 
     def __by_title(self, title):
-        cursor = self.__get_cursor()
-        cursor.execute(
-            ("SELECT Title, Title1, Lang, BookId, FileType FROM `libbook` "
-             "WHERE MATCH (Title, Title1) "
-             """AGAINST (%s IN BOOLEAN MODE) """
-             "AND Deleted=0 AND "
-             "(Lang='ru' OR Lang='uk' OR Lang='kk' OR Lang='be')"), (title, )
-        )
-        row = cursor.fetchall()
-        cursor.close()
-        if row:
+        row = self.fetchall(
+                ("SELECT Title, Title1, Lang, BookId, FileType FROM `libbook` "
+                 "WHERE MATCH (Title) "
+                 """AGAINST (%s IN BOOLEAN MODE) """), (for_search(title), )
+            )
+        if row and not isinstance(row, Error):
             return self.__processing_books(row)
-        else:
-            return None
-
-    def search_authors(self, author):
-        cursor = self.__get_cursor()
-        cursor.execute(
-            ("SELECT AvtorId, FirstName, MiddleName, LastName "
-             "FROM `libavtorname` "
-             "WHERE MATCH (FirstName, MiddleName, LastName) "
-             "AGAINST (%s IN BOOLEAN MODE)"), (author, )
-        )
-        row = cursor.fetchall()
-        cursor.close()
-        if row:
-            return self.__processing_authors(row)
         else:
             return None
 

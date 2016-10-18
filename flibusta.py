@@ -65,12 +65,10 @@ def bot_help(msg):
 
 @add_command(r'info')
 def info(msg):
-    info_msg = ("Каталог книг от 11.09.16\n"
+    info_msg = ("Каталог книг от 17.10.16\n"
                 "Если хотите помочь проекту /donate\n"
                 "Связь с создателем проекта @kurbezz\n"
-                "Версия бота 1.1.0\n"
                 "Github: https://goo.gl/V0Iw7m")
-    print(info_msg)
     msg.reply_to_chat(Text(info_msg,
                            parse_mode='HTML'),
                       to_message=True)
