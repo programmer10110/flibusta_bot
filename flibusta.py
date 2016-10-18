@@ -68,6 +68,7 @@ def info(msg):
     info_msg = ("Каталог книг от 17.10.16\n"
                 "Если хотите помочь проекту /donate\n"
                 "Связь с создателем проекта @kurbezz\n"
+                "Версия бота 1.1.2\n"
                 "Github: https://goo.gl/V0Iw7m")
     msg.reply_to_chat(Text(info_msg,
                            parse_mode='HTML'),
