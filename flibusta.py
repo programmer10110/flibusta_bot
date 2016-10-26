@@ -7,6 +7,7 @@ import zipfile
 import requests
 import os
 from transliterate import translit
+from stopwords import StopWords
 
 import config
 
@@ -21,6 +22,7 @@ def track(user, event, arg):
                  },
                 event)
 
+
 def track_error():
     botan.track(config.botan_token,
                 0,
@@ -28,9 +30,27 @@ def track_error():
                 'Error')
 
 
+def test_words(string):
+    words = string.split()
+    if len(words) <= 2:
+        res = ''
+        for word in words:
+            if not stop.word_status(word.lower()):
+                if res:
+                    res += ' ' + word
+                else:
+                    res += word
+        return res
+    else:
+        return string
+
+
 def search(by, arg):
     if by == 'title':
-        return books.search_by_title(arg)
+        if test_words(arg):
+            return books.search_by_title(test_words(arg))
+        else:
+            return None
     if by == 'authors':
         return books.search_authors(arg)
     if by == 'by_author':
@@ -65,7 +85,7 @@ def bot_help(msg):
 
 @add_command(r'info')
 def info(msg):
-    info_msg = ("Каталог книг от 17.10.16\n"
+    info_msg = ("Каталог книг от 22.10.16\n"
                 "Если хотите помочь проекту /donate\n"
                 "Связь с создателем проекта @kurbezz\n"
                 "Версия бота 1.1.2\n"
@@ -90,6 +110,18 @@ def donate(msg):
                            disable_web_page_preview=True),
                       to_message=True)
     track(msg.from_, 'donate', None)
+
+
+@add_command(r'flibusta')
+def flibusta_url(msg):
+    text = '<a href="{0}">Ссылка на флибусту</a>'.format(
+        noblock_foo('http://flibusta.is')
+        )
+    msg.reply_to_chat(Text(text, parse_mode='HTML',
+                           disable_web_page_preview=True),
+                      to_message=True
+        )
+    track(msg.from_, 'flibusta', None)
 
 
 def get_page(books_list, page_number):
@@ -131,6 +163,20 @@ def get_authors(msg, author):
         msg.reply_to_chat(Text('/author <Автор>'), to_message=True)
         track(msg.from_, 'author', None)
 
+@add_command(r'add_stopword', args=1)
+def add_stopword(msg, word):
+    if word:
+        stop.add(word)
+        msg.reply_to_chat(Text('Добавлено!'),
+                          to_message=True)
+
+@add_command(r'word_status', args=1)
+def word_status(msg, word):
+    if stop.word_status(word):
+        text = 'Слово есть в стоп листе!'
+    else:
+        text = 'Слова нет в стоп листе!'
+    msg.reply_to_chat(Text(text), to_message=True)
 
 @add_command(r'fb2', args=1, endl='_')
 def download_fb2(*args):
@@ -222,7 +268,10 @@ def download_ziped(msg, ident, f_type, noblock=False):
                                   to_message=True)
                 return 0
             else:
-                name = author.short.replace(' ', '_') + '_-_'
+                if author:
+                    name = author.short.replace(' ', '_') + '_-_'
+                else:
+                    name = ""
                 name +=  book.title.replace(' ', '_') +  '.' + f_type
                 name = translit(name, 'ru', reversed=True)
                 filename = zip_obj.namelist()[0]
@@ -267,7 +316,10 @@ def download(msg, ident, f_type, noblock=False):
             url += "download"
         request = make_request(url)
         if request:
-            name = author.short.replace(' ', '_') + '_-_'
+            if author:
+                name = author.short.replace(' ', '_') + '_-_'
+            else:
+                name = ""
             name +=  book.title.replace(' ', '_') +  '.' + f_type
             name = translit(name, 'ru', reversed=True)
             reply = msg.reply_to_chat(
@@ -444,12 +496,14 @@ def new_page_changer(query):
             new_send(msg, 'book', int(page), list_)
         else:
             msg.edit_message('Книги не найдены!')
+        track(msg.from_, 'title', None)
     if type_ == 'a':
         list_ = search('authors', msg.reply_to_message.text)
         if list_:
             new_send(msg, 'author', int(page), list_)
         else:
             msg.edit_message('Автор не найден!')
+        track(msg.from_, 'author', None)
 
 
 def new_send(msg, type_, page, list_):
@@ -503,5 +557,6 @@ def new_send(msg, type_, page, list_):
 if __name__ == '__main__':
     books = Library()
     tokens = FileTokens(config.tokens_name)
+    stop = StopWords('stop_list.db')
     bot = Bot(config.bot_token)
     bot.handler.start(config.bot_threads)
