@@ -1,7 +1,6 @@
 from telegram_bot_api import *
 from book_lib import Library
 from file_tokens import FileTokens
-from noblockme import noblock as noblock_foo
 import botan
 import zipfile
 import requests
@@ -73,19 +72,15 @@ def start(msg):
 
 @add_command(r'help')
 def bot_help(msg):
-    help_msg = ("Для поиска по названию набери /title <Название>\n"
-                "  Например: /title Лолита\n"
-                "\n"
-                "Для поиска автора набери /author <Имя>\n"
-                "  Например: /author Булгаков\n"
-                "Также можешь посмотреть видео: https://youtu.be/pNAZWxDmfPo")
+    help_msg = ("Лучше один раз увидеть, чем сто раз услышать.\n"
+                "https://youtu.be/V8XHzRSRcWk")
     msg.reply_to_chat(Text(help_msg), to_message=True)
     track(msg.from_, 'help', None)
 
 
 @add_command(r'info')
 def info(msg):
-    info_msg = ("Каталог книг от 22.10.16\n"
+    info_msg = ("Каталог книг от 08.11.16\n"
                 "Если хотите помочь проекту /donate\n"
                 "Связь с создателем проекта @kurbezz\n"
                 "Версия бота 1.1.2\n"
@@ -114,13 +109,11 @@ def donate(msg):
 
 @add_command(r'flibusta')
 def flibusta_url(msg):
-    text = '<a href="{0}">Ссылка на флибусту</a>'.format(
-        noblock_foo('http://flibusta.is')
-        )
+    text = 'http://s7m03fvh.mfxc.http.s11.wbprx.com'
     msg.reply_to_chat(Text(text, parse_mode='HTML',
                            disable_web_page_preview=True),
                       to_message=True
-        )
+                      )
     track(msg.from_, 'flibusta', None)
 
 
@@ -131,7 +124,7 @@ def get_page(books_list, page_number):
     else:
         pages = len(books_list) // max_books + 1
     return books_list[max_books * (page_number - 1):min(
-        len(books_list),max_books * page_number)], pages
+        len(books_list), max_books * page_number)], pages
 
 
 @add_command(r'title', args=1)
@@ -163,12 +156,14 @@ def get_authors(msg, author):
         msg.reply_to_chat(Text('/author <Автор>'), to_message=True)
         track(msg.from_, 'author', None)
 
+
 @add_command(r'add_stopword', args=1)
 def add_stopword(msg, word):
     if word:
         stop.add(word)
         msg.reply_to_chat(Text('Добавлено!'),
                           to_message=True)
+
 
 @add_command(r'word_status', args=1)
 def word_status(msg, word):
@@ -177,6 +172,7 @@ def word_status(msg, word):
     else:
         text = 'Слова нет в стоп листе!'
     msg.reply_to_chat(Text(text), to_message=True)
+
 
 @add_command(r'fb2', args=1, endl='_')
 def download_fb2(*args):
@@ -217,7 +213,7 @@ def make_request(url, timeout=10, noblock=False):
             if noblock:
                 new_url = noblock_foo(url)
                 if new_url:
-                    request = request.get(new_url)
+                    request = requests.get(new_url)
                 else:
                     raise requests.exceptions.ConnectionError
             else:
@@ -236,6 +232,7 @@ def make_request(url, timeout=10, noblock=False):
             try_n += 1
         else:
             return request
+
 
 def download_ziped(msg, ident, f_type, noblock=False):
     book = books.get_book(ident)
@@ -272,7 +269,7 @@ def download_ziped(msg, ident, f_type, noblock=False):
                     name = author.short.replace(' ', '_') + '_-_'
                 else:
                     name = ""
-                name +=  book.title.replace(' ', '_') +  '.' + f_type
+                name += book.title.replace(' ', '_') + '.' + f_type
                 name = translit(name, 'ru', reversed=True)
                 filename = zip_obj.namelist()[0]
                 zip_obj.extract(filename)
@@ -320,7 +317,7 @@ def download(msg, ident, f_type, noblock=False):
                 name = author.short.replace(' ', '_') + '_-_'
             else:
                 name = ""
-            name +=  book.title.replace(' ', '_') +  '.' + f_type
+            name += book.title.replace(' ', '_') + '.' + f_type
             name = translit(name, 'ru', reversed=True)
             reply = msg.reply_to_chat(
                 Document(
@@ -346,9 +343,8 @@ def book_to_send(book):
               "<b>{1}</b>\n").format(book.title,
                                      book.normal_name,
                                      book.lang)
-    url = 'http://flibusta.is/b/{0}'.format(book.id_)
     if book.file_type == 'fb2':
-        result += ('📖 Читать(Бета): /read_{0}\n'
+        result += (# '📖 Читать(Бета): /read_{0}\n'
                    '⬇ fb2: /fb2_{0}\n'
                    '⬇ epub: /epub_{0}\n'
                    '⬇ mobi: /mobi_{0}\n\n').format(book.id_)
@@ -379,12 +375,12 @@ def send(msg, list_, page, type_, first=False):
         keyboard.add_row(
             InlineKeyboardButton('>>>',
                                  callback_data='page_{0}'.format(page + 1))
-                         )
+        )
     elif page == pages:
         keyboard.add_row(
             InlineKeyboardButton('<<<',
                                  callback_data='page_{0}'.format(page - 1))
-                         )
+        )
     else:
         keyboard.add_row(
             InlineKeyboardButton('<<<',
@@ -458,27 +454,22 @@ def url_author(msg, id_):
 @add_command(r'read', args=1, endl='_')
 def read(msg, id_):
     msg.reply_to_chat(ChatAction('typing'))
-    basic_url = 'flibusta.is/b/{0}/read'.format(id_)
-    url = noblock_foo(basic_url)
-    if url:
-        msg.reply_to_chat(Text(('<a href="{0}">'
-                                'Ссылка для чтения</a>').format(url),
-                                parse_mode='HTML',
-                                disable_web_page_preview=True),
-                          to_message=True)
-    else:
-        msg.reply_to_chat(Text('Ошибка! Попробуй позднее :('),
-                          to_message=True)
+    url = 'http://s7m03fvh.mfxc.http.s11.wbprx.com/b/{0}/read'.format(id_)
+    msg.reply_to_chat(Text(('<a href="{0}">'
+                            'Ссылка для чтения</a>').format(url),
+                           parse_mode='HTML',
+                           disable_web_page_preview=True),
+                      to_message=True)
 
 
-#new search
+# new search
 
 @add_message(r'^([^(http|/)]*)')
 def new_search(msg):
     keyboard = InlineKeyboardMarkup()
     keyboard.add_row(InlineKeyboardButton('По названию',
                                           callback_data='page_t_1'),
-                     InlineKeyboardButton('По автору',
+                     InlineKeyboardButton('По авторам',
                                           callback_data='page_a_1')
                      )
     msg.reply_to_chat(Text('Поиск (Бета):', reply_markup=keyboard),
@@ -519,7 +510,7 @@ def new_send(msg, type_, page, list_):
 
     if type_ == 'author':
         page_t = 'a'
-    if type_ == 'book':
+    else:
         page_t = 't'
 
     keyboard = InlineKeyboardMarkup()
@@ -531,14 +522,14 @@ def new_send(msg, type_, page, list_):
                                  callback_data='page_{1}_{0}'.format(page + 1,
                                                                      page_t)
                                  )
-                         )
+        )
     elif page == pages:
         keyboard.add_row(
             InlineKeyboardButton('<<<',
                                  callback_data='page_{1}_{0}'.format(page - 1,
                                                                      page_t)
                                  )
-                         )
+        )
     else:
         keyboard.add_row(
             InlineKeyboardButton('<<<',
@@ -550,7 +541,7 @@ def new_send(msg, type_, page, list_):
                                                                      page_t)
                                  )
         )
-    
+
     msg.edit_message(msg_text, parse_mode='HTML', reply_markup=keyboard)
 
 
