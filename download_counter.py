@@ -35,4 +35,3 @@ class Counter:
             return count
         else:
             return 0
-

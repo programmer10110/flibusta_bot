@@ -5,7 +5,7 @@ def noblock(url):
     try_n = 0
     while try_n < 3:
         try:
-            request = requests.get('http://noblockme.ru/api/anonymize?url='+url)
+            request = requests.get('http://noblockme.ru/api/anonymize?url=' + url)
         except requests.exceptions.ConnectionError as exp:
             print(exp)
             try_n += 1

@@ -7,6 +7,7 @@ import requests
 import os
 from transliterate import translit
 from stopwords import StopWords
+from noblockme import noblock as noblock_foo
 
 import config
 
@@ -45,18 +46,15 @@ def test_words(string):
 
 
 def search(by, arg):
-    if by == 'title':
-        if test_words(arg):
-            return books.search_by_title(test_words(arg))
-        else:
-            return None
-    if by == 'authors':
-        return books.search_authors(arg)
-    if by == 'by_author':
-        if arg:
+    if arg:
+        if by == 'title':
+            if test_words(arg):
+                return books.search_by_title(test_words(arg))
+        if by == 'authors':
+            return books.search_authors(arg)
+        if by == 'by_author':
             return books.search_by_author(arg)
-    if by == 'book_id':
-        if arg:
+        if by == 'book_id':
             return [books.get_book(arg)]
 
 
@@ -80,10 +78,10 @@ def bot_help(msg):
 
 @add_command(r'info')
 def info(msg):
-    info_msg = ("Каталог книг от 08.11.16\n"
+    info_msg = ("Каталог книг от 10.12.16\n"
                 "Если хотите помочь проекту /donate\n"
                 "Связь с создателем проекта @kurbezz\n"
-                "Версия бота 1.1.2\n"
+                "Версия бота 1.2.0\n"
                 "Github: https://goo.gl/V0Iw7m")
     msg.reply_to_chat(Text(info_msg,
                            parse_mode='HTML'),
@@ -107,16 +105,6 @@ def donate(msg):
     track(msg.from_, 'donate', None)
 
 
-@add_command(r'flibusta')
-def flibusta_url(msg):
-    text = 'http://s7m03fvh.mfxc.http.s11.wbprx.com'
-    msg.reply_to_chat(Text(text, parse_mode='HTML',
-                           disable_web_page_preview=True),
-                      to_message=True
-                      )
-    track(msg.from_, 'flibusta', None)
-
-
 def get_page(books_list, page_number):
     max_books = 10
     if len(books_list) <= max_books:
@@ -125,36 +113,6 @@ def get_page(books_list, page_number):
         pages = len(books_list) // max_books + 1
     return books_list[max_books * (page_number - 1):min(
         len(books_list), max_books * page_number)], pages
-
-
-@add_command(r'title', args=1)
-def by_title(msg, title):
-    if title:
-        books_list = search('title', title)
-        msg.reply_to_chat(ChatAction('typing'))
-        if books_list:
-            send(msg, books_list, 1, 'book', first=True)
-        else:
-            msg.reply_to_chat(Text('Книги не найдены!'), to_message=True)
-        track(msg.from_, 'title', title)
-    else:
-        msg.reply_to_chat(Text('/title <Название>'), to_message=True)
-        track(msg.from_, 'title', None)
-
-
-@add_command(r'author', args=1)
-def get_authors(msg, author):
-    if author:
-        authors_list = search('authors', author)
-        msg.reply_to_chat(ChatAction('typing'))
-        if authors_list:
-            send(msg, authors_list, 1, 'author', first=True)
-        else:
-            msg.reply_to_chat(Text('Автор не найден!'), to_message=True)
-        track(msg.from_, 'author', author)
-    else:
-        msg.reply_to_chat(Text('/author <Автор>'), to_message=True)
-        track(msg.from_, 'author', None)
 
 
 @add_command(r'add_stopword', args=1)
@@ -222,9 +180,6 @@ def make_request(url, timeout=10, noblock=False):
                                        cookies=cookies,
                                        timeout=timeout)
         except requests.exceptions.ConnectionError as exp:
-            print(exp)
-            try_n += 1
-        except requests.exceptions.ConnectTimeout as exp:
             print(exp)
             try_n += 1
         except requests.exceptions.ReadTimeout as exp:
@@ -344,10 +299,10 @@ def book_to_send(book):
                                      book.normal_name,
                                      book.lang)
     if book.file_type == 'fb2':
-        result += (# '📖 Читать(Бета): /read_{0}\n'
-                   '⬇ fb2: /fb2_{0}\n'
-                   '⬇ epub: /epub_{0}\n'
-                   '⬇ mobi: /mobi_{0}\n\n').format(book.id_)
+        result += (  # '📖 Читать(Бета): /read_{0}\n'
+            '⬇ fb2: /fb2_{0}\n'
+            '⬇ epub: /epub_{0}\n'
+            '⬇ mobi: /mobi_{0}\n\n').format(book.id_)
     else:
         result += '⬇ {0}: /{0}_{1}\n\n'.format(book.file_type, book.id_)
     return result
@@ -357,76 +312,12 @@ def author_to_send(author):
     return "👤 <b>{0}</b>\n/a_{1}\n\n".format(author.normal_name, author.id)
 
 
-def send(msg, list_, page, type_, first=False):
-    msg.reply_to_chat(ChatAction('typing'))
-    list_, pages = get_page(list_, page)
-    msg_text = ''
-    for obj in list_:
-        if type_ == 'book':
-            msg_text += book_to_send(obj)
-        if type_ == 'author':
-            msg_text += author_to_send(obj)
-    msg_text += '<code>Страница {0}/{1}</code>'.format(page, pages)
-
-    keyboard = InlineKeyboardMarkup()
-    if page == 1 and pages == 1:
-        pass
-    elif page == 1 and pages != 1:
-        keyboard.add_row(
-            InlineKeyboardButton('>>>',
-                                 callback_data='page_{0}'.format(page + 1))
-        )
-    elif page == pages:
-        keyboard.add_row(
-            InlineKeyboardButton('<<<',
-                                 callback_data='page_{0}'.format(page - 1))
-        )
-    else:
-        keyboard.add_row(
-            InlineKeyboardButton('<<<',
-                                 callback_data='page_{0}'.format(page - 1)),
-            InlineKeyboardButton('>>>',
-                                 callback_data='page_{0}'.format(page + 1))
-        )
-    if first:
-        msg.reply_to_chat(Text(msg_text, parse_mode='HTML',
-                               reply_markup=keyboard),
-                          to_message=True)
-    else:
-        msg.edit_message(msg_text, parse_mode='HTML', reply_markup=keyboard)
-
-
-@add_callback(r'page_[0-9]+')
-def pages_changer(query):
-    msg = query.message
-    msg.reply_to_chat(ChatAction('typing'))
-    _, page = query.data.split('_')
-    text = msg.reply_to_message.text
-    if '_' in text:
-        command = text[:text.find('_')]
-        arg = text[text.find('_') + 1:]
-    else:
-        command = text[:text.find(' ')]
-        arg = text[text.find(' ') + 1:]
-    if command[1:] == 'title':
-        list_ = search('title', arg)
-        track(msg.from_, 'title', arg)
-        send(msg, list_, int(page), 'book')
-    elif command[1:] == 'author':
-        list_ = search('authors', arg)
-        track(msg.from_, 'author', arg)
-        send(msg, list_, int(page), 'author')
-    elif command[1:] == 'a':
-        list_ = search('by_author', arg)
-        send(msg, list_, int(page), 'book')
-
-
 @add_command(r'a', args=1, endl='_')
 def by_author(msg, id_):
     books_list = search('by_author', id_)
     msg.reply_to_chat(ChatAction('typing'))
     if books_list:
-        send(msg, books_list, 1, 'book', first=True)
+        new_send(msg, 'by_author', 1, books_list, first=True)
     else:
         msg.reply_to_chat(Text('Ошибка!'), to_message=True)
 
@@ -436,7 +327,7 @@ def url_book(msg, id_):
     books_list = search('book_id', id_)
     msg.reply_to_chat(ChatAction('typing'))
     if books_list:
-        send(msg, books_list, 1, 'book', first=True)
+        new_send(msg, 'book', 1, books_list)
     else:
         msg.reply_to_chat(Text('Ошибка!'), to_message=True)
 
@@ -446,7 +337,7 @@ def url_author(msg, id_):
     books_list = search('by_author', id_)
     msg.reply_to_chat(ChatAction('typing'))
     if books_list:
-        send(msg, books_list, 1, 'book', first=True)
+        new_send(msg, 'book', 1, books_list)
     else:
         msg.reply_to_chat(Text('Ошибка!'), to_message=True)
 
@@ -472,11 +363,11 @@ def new_search(msg):
                      InlineKeyboardButton('По авторам',
                                           callback_data='page_a_1')
                      )
-    msg.reply_to_chat(Text('Поиск (Бета):', reply_markup=keyboard),
+    msg.reply_to_chat(Text('Поиск:', reply_markup=keyboard),
                       to_message=True)
 
 
-@add_callback(r'page_[at]_[0-9]+')
+@add_callback(r'page_[atb]_[0-9]+')
 def new_page_changer(query):
     msg = query.message
     msg.reply_to_chat(ChatAction('typing'))
@@ -487,29 +378,39 @@ def new_page_changer(query):
             new_send(msg, 'book', int(page), list_)
         else:
             msg.edit_message('Книги не найдены!')
-        track(msg.from_, 'title', None)
+        track(msg.from_, 'title', msg.reply_to_message.text)
     if type_ == 'a':
         list_ = search('authors', msg.reply_to_message.text)
         if list_:
             new_send(msg, 'author', int(page), list_)
         else:
             msg.edit_message('Автор не найден!')
-        track(msg.from_, 'author', None)
+        track(msg.from_, 'author', msg.reply_to_message.text)
+    if type_ == 'b':
+        _, id_ = msg.reply_to_message.text.split('_')
+        list_ = search('by_author', id_)
+        if list_:
+            new_send(msg, 'by_author', int(page), list_)
+        else:
+            msg.edit_message('Книги не найдены!')
+        track(msg.from_, 'author', id_)
 
 
-def new_send(msg, type_, page, list_):
+def new_send(msg, type_, page, list_, first=False):
     msg.reply_to_chat(ChatAction('typing'))
     list_, pages = get_page(list_, page)
     msg_text = ''
     for obj in list_:
-        if type_ == 'book':
+        if type_ == 'book' or type_ == 'by_author':
             msg_text += book_to_send(obj)
-        if type_ == 'author':
+        elif type_ == 'author':
             msg_text += author_to_send(obj)
     msg_text += '<code>Страница {0}/{1}</code>'.format(page, pages)
 
     if type_ == 'author':
         page_t = 'a'
+    elif type_ == 'by_author':
+        page_t = 'b'
     else:
         page_t = 't'
 
@@ -541,8 +442,36 @@ def new_send(msg, type_, page, list_):
                                                                      page_t)
                                  )
         )
-
-    msg.edit_message(msg_text, parse_mode='HTML', reply_markup=keyboard)
+    if pages >= 10:
+        if page == 1:
+            keyboard.add_row(
+                InlineKeyboardButton('>{0}'.format(min(pages, page + 10)),
+                                     callback_data='page_{0}'.format(min(page + 10, pages),
+                                                                     page_t)
+                                     )
+            )
+        elif page == pages:
+            keyboard.add_row(
+                InlineKeyboardButton('{0}<'.format(max(1, page - 10)),
+                                     callback_data='page_{1}_{0}'.format(max(1, page - 10),
+                                                                         page_t)
+                                     )
+            )
+        else:
+            keyboard.add_row(
+                InlineKeyboardButton('{0}<'.format(max(1, page - 10)),
+                                     callback_data='page_{1}_{0}'.format(max(1, page - 10),
+                                                                         page_t)
+                                     ),
+                InlineKeyboardButton('>{0}'.format(min(pages, page + 10)),
+                                     callback_data='page_{1}_{0}'.format(min(page + 10, pages),
+                                                                         page_t)
+                                     )
+            )
+    if first:
+        msg.reply_to_chat(Text(msg_text, parse_mode='HTML', reply_markup=keyboard), to_message=True)
+    else:
+        msg.edit_message(msg_text, parse_mode='HTML', reply_markup=keyboard)
 
 
 if __name__ == '__main__':

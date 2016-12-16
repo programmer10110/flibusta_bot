@@ -1,7 +1,6 @@
 import requests
 import json
 
-
 TRACK_URL = 'https://api.botan.io/track'
 SHORTENER_URL = 'https://api.botan.io/s/'
 

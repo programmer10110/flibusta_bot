@@ -7,7 +7,7 @@ from config import *
 
 def sort_by_alphabet(obj):
     if obj.title:
-        return obj.title
+        return obj.title.replace('«', '').replace('»', '')
     else:
         return None
 
@@ -76,6 +76,7 @@ class Book:
         self.normal_name = normal_name(self.first_name, self.middle_name,
                                        self.last_name)
 
+
 class Author:
     def __init__(self, id_, first_name, middle_name, last_name):
         self.id = id_
@@ -85,6 +86,7 @@ class Author:
         self.normal_name = normal_name(self.first_name, self.middle_name,
                                        self.last_name)
         self.short = short(self.first_name, self.middle_name, self.last_name)
+
 
 class Library:
     def __init__(self):
@@ -137,41 +139,41 @@ class Library:
         return result
 
     def fetchone(self, sql, args):
-    	cursor = self.__get_cursor()
-    	try:
-    		cursor.execute(sql, args)
-    		res = cursor.fetchone()
-    		cursor.close()
-    	except Error as e:
-    		return e
-    	else:
-    		return res
+        cursor = self.__get_cursor()
+        try:
+            cursor.execute(sql, args)
+            res = cursor.fetchone()
+            cursor.close()
+        except Error as e:
+            return e
+        else:
+            return res
 
     def fetchall(self, sql, args):
-    	cursor = self.__get_cursor()
-    	try:
-    		cursor.execute(sql, args)
-    		res = cursor.fetchall()
-    		cursor.close()
-    	except Error as e:
-    		return e
-    	else:
-    		return res 
+        cursor = self.__get_cursor()
+        try:
+            cursor.execute(sql, args)
+            res = cursor.fetchall()
+            cursor.close()
+        except Error as e:
+            return e
+        else:
+            return res
 
     def get_author_info(self, id_):
         author_id = self.fetchone(
-                ("SELECT AvtorId FROM `libavtor` WHERE BookId=%s"), (id_, )
-            )
-        
+            ("SELECT AvtorId FROM `libavtor` WHERE BookId=%s"), (id_,)
+        )
+
         if author_id and not isinstance(author_id, Error):
             return self.fetchone(
-                    ("SELECT LastName, FirstName, MiddleName "
-                     "FROM libavtorname WHERE AvtorId=%s"), (author_id[0], )
-            	)
+                ("SELECT LastName, FirstName, MiddleName "
+                 "FROM libavtorname WHERE AvtorId=%s"), (author_id[0],)
+            )
 
     def good_author_id(self, id_):
         result = self.fetchall(
-                "SELECT * FROM `libavtoraliase` WHERE BadId=%s", (id_, )
+            "SELECT * FROM `libavtoraliase` WHERE BadId=%s", (id_,)
         )
         if result and not isinstance(result, Error):
             return False
@@ -180,8 +182,8 @@ class Library:
 
     def __by_author_id(self, id_):
         book_ids = self.fetchall(
-                'SELECT BookId FROM `libavtor` WHERE AvtorId=%s;', (id_, )
-            )
+            'SELECT BookId FROM `libavtor` WHERE AvtorId=%s;', (id_,)
+        )
         if book_ids and not isinstance(book_ids, Error):
             books = []
             for book_id in [x[0] for x in book_ids]:
@@ -194,13 +196,13 @@ class Library:
             else:
                 return None
         else:
-        	return None
+            return None
 
     def get_book(self, id_):
         book = self.fetchall(
-                ("SELECT Title, Title1, Lang, BookId, FileType "
-                 "FROM `libbook` WHERE BookId=%s"), (id_, )
-            )
+            ("SELECT Title, Title1, Lang, BookId, FileType "
+             "FROM `libbook` WHERE BookId=%s"), (id_,)
+        )
         if book and not isinstance(book, Error):
             book = book[0]
             author = self.get_author_info(book[3])
@@ -214,40 +216,39 @@ class Library:
             return None
 
     def author_have_book(self, id_):
-    	return self.fetchone('SELECT count(*) FROM `libavtor` WHERE AvtorId=%s;',
-    					     (id_,)
-    		)
-
+        return self.fetchone('SELECT count(*) FROM `libavtor` WHERE AvtorId=%s;',
+                             (id_,)
+                             )
 
     def search_authors(self, author):
         row = self.fetchall(("SELECT AvtorId, FirstName, MiddleName, LastName "
-                 "FROM `libavtorname` "
-                 "WHERE MATCH (FirstName, MiddleName, LastName) "
-                 "AGAINST (%s IN BOOLEAN MODE)"), (for_search(author), )
-            )
+                             "FROM `libavtorname` "
+                             "WHERE MATCH (FirstName, MiddleName, LastName) "
+                             "AGAINST (%s IN BOOLEAN MODE)"), (for_search(author),)
+                            )
         if row and not isinstance(row, Error):
-            authors =  self.__processing_authors(row)
+            authors = self.__processing_authors(row)
             res = []
             for aut in authors:
-            	hb = self.author_have_book(aut.id)
-            	if isinstance(hb, Error):
-            		res.append(aut)
-            	else:
-            		if hb[0] > 0:
-            			res.append(aut)
+                hb = self.author_have_book(aut.id)
+                if isinstance(hb, Error):
+                    res.append(aut)
+                else:
+                    if hb[0] > 0:
+                        res.append(aut)
             if res:
-            	return res
+                return res
             else:
-            	return None
+                return None
         else:
             return None
 
     def __by_title(self, title):
         row = self.fetchall(
-                ("SELECT Title, Title1, Lang, BookId, FileType FROM `libbook` "
-                 "WHERE MATCH (Title) "
-                 """AGAINST (%s IN BOOLEAN MODE) """), (for_search(title), )
-            )
+            ("SELECT Title, Title1, Lang, BookId, FileType FROM `libbook` "
+             "WHERE MATCH (Title) "
+             """AGAINST (%s IN BOOLEAN MODE) """), (for_search(title),)
+        )
         if row and not isinstance(row, Error):
             return self.__processing_books(row)
         else:
