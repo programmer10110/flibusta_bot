@@ -7,6 +7,7 @@ import os
 import zipfile
 import time
 import logging
+import flask
 
 import config
 from catalog import Library
@@ -17,6 +18,30 @@ bot = telebot.TeleBot(config.TOKEN)
 lib = Library()
 
 telebot.logger.setLevel(logging.DEBUG)
+
+
+app = flask.Flask(__name__)
+
+
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    return ''
+
+
+@app.route('/status', methods=['GET'])
+def status():
+    return 'OK!'
+
+
+@app.route(config.WEBHOOK_URL_PATH, methods=['POST'])
+def webhook():
+    if flask.request.headers.get('content-type') == 'application/json':
+        json_string = flask.request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return ''
+    else:
+        flask.abort(403)
 
 
 def get_keyboard(page, pages, t):
@@ -58,11 +83,10 @@ def help_foo(msg):
 @bot.message_handler(commands=['info'])
 def info(msg):
     info_msg = (f"Каталог книг от {config.DB_DATE}\n"
-                "Если хотите помочь проекту /donate\n"
                 "Связь с создателем проекта @kurbezz\n"
                 f"Версия бота {config.VERSION}\n"
                 "Github: https://goo.gl/V0Iw7m")
-    bot.reply_to(msg, info_msg)
+    bot.reply_to(msg, info_msg, disable_web_page_preview=True)
 
 
 @bot.callback_query_handler(func=lambda x: re.search(r'b_([0-9])+', x.data) is not None)
@@ -77,7 +101,7 @@ def search_by_title(callback):
         return
     page = int(page)
     if not books:
-        bot.send_message(msg.chat.id, 'Книги не найдены!,')
+        bot.edit_message_text('Книги не найдены!', chat_id=msg.chat.id, message_id=msg.message_id)
         return
     bot.send_chat_action(msg.chat.id, 'typing')
     if len(books) % ELEMENTS_ON_PAGE == 0:
@@ -205,7 +229,7 @@ def download(msg, type_, book_id=None):
     except requests.exceptions.ConnectionError as err:
         telebot.logger.exception(err)
         return
-    if bytes('<!DOCTYPE html', 'utf-8') in r.content:
+    if '<!DOCTYPE html' in str(r.content[:100]):
         try:
             r = requests.get(f"http://flibustahezeous3.onion/b/{book_id}/{type_}",
                              proxies=config.PROXIES)
@@ -213,6 +237,9 @@ def download(msg, type_, book_id=None):
             telebot.logger.exception(err)
             bot.reply_to(msg, "Ошибка подключения к серверу! Попробуйте позднее.")
             return
+    if '<!DOCTYPE html' in str(r.content[:100]):
+        bot.reply_to(msg, 'Ошибка!')
+        return
     book = lib.book_by_id(book_id)
     if not book:
         bot.reply_to(msg, 'Книга не найдена!')
@@ -231,7 +258,11 @@ def download(msg, type_, book_id=None):
         f.write(r.content)
     if type_ == 'fb2':
         os.rename(filename, filename.replace('.fb2', '.zip'))
-        zip_obj = zipfile.ZipFile(filename.replace('.fb2', '.zip'))
+        try:
+            zip_obj = zipfile.ZipFile(filename.replace('.fb2', '.zip'))
+        except zipfile.BadZipFile as err:
+            print(err)
+            return
         extracted = zip_obj.namelist()[0]
         zip_obj.extract(extracted)
         zip_obj.close()
@@ -286,4 +317,15 @@ def search(msg):
     bot.reply_to(msg, 'Поиск: ', reply_markup=keyboard)
 
 
-bot.polling()
+bot.remove_webhook()
+
+time.sleep(0.5)
+
+bot.set_webhook(url=config.WEBHOOK_URL_BASE + config.WEBHOOK_URL_PATH,
+                certificate=open(config.WEBHOOK_SSL_CERT, 'r'))
+
+
+app.run(host=config.WEBHOOK_LISTEN,
+        port=config.WEBHOOK_PORT,
+        ssl_context=(config.WEBHOOK_SSL_CERT, config.WEBHOOK_SSL_PRIV),
+        debug=True)
