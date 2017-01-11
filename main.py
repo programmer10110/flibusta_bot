@@ -9,6 +9,7 @@ import time
 import logging
 import flask
 
+import botan
 import config
 from catalog import Library
 
@@ -17,10 +18,51 @@ ELEMENTS_ON_PAGE = 10
 bot = telebot.TeleBot(config.TOKEN)
 lib = Library()
 
-telebot.logger.setLevel(logging.DEBUG)
+telebot.logger.setLevel(logging.INFO)
 
 
 app = flask.Flask(__name__)
+
+
+def track(uid, msg, name):
+    if type(msg) is types.Message:
+        return botan.track(config.BOTAN_TOKEN, uid,
+                           {'message': {
+                               'user': {
+                                   'id': msg.from_user.id,
+                                   'first_name': msg.from_user.first_name,
+                                   'username': msg.from_user.username,
+                                   'last_name': msg.from_user.last_name
+                               },
+                               'text': msg.text
+                           }
+                            },
+                           name=name)
+    if type(msg) is types.CallbackQuery:
+        return botan.track(config.BOTAN_TOKEN, uid,
+                           {'callback_query': {
+                               'user': {
+                                   'id': msg.from_user.id,
+                                   'first_name': msg.from_user.first_name,
+                                   'username': msg.from_user.username,
+                                   'last_name': msg.from_user.last_name
+                               },
+                               'text': msg.reply_to_message.text
+                           }
+                            },
+                           name=name)
+    if type(msg) is types.InlineQuery:
+        return botan.track(config.BOTAN_TOKEN, uid,
+                           {'inline_query': {
+                               'user': {
+                                   'id': msg.from_user.id,
+                                   'first_name': msg.from_user.first_name,
+                                   'username': msg.from_user.username,
+                                   'last_name': msg.from_user.last_name
+                               },
+                               'query': msg.query
+                           }},
+                           name=name)
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -68,9 +110,11 @@ def start(msg):
                      "Набери /help что бы получить помощь.\n"
                      "Информация о боте /info.\n")
         bot.reply_to(msg, start_msg)
+        track(msg.from_user.id, msg, 'start')
     else:
         type_, id_ = rq.split('_')
         download(msg, type_, book_id=int(id_))
+        track(msg.from_user.id, msg, 'get_shared_book')
 
 
 @bot.message_handler(commands=['help'])
@@ -78,6 +122,7 @@ def help_foo(msg):
     help_msg = ("Лучше один раз увидеть, чем сто раз услышать.\n"
                 "https://youtu.be/V8XHzRSRcWk")
     bot.reply_to(msg, help_msg)
+    track(msg.from_user.id, msg, 'help')
 
 
 @bot.message_handler(commands=['info'])
@@ -87,6 +132,7 @@ def info(msg):
                 f"Версия бота {config.VERSION}\n"
                 "Github: https://goo.gl/V0Iw7m")
     bot.reply_to(msg, info_msg, disable_web_page_preview=True)
+    track(msg.from_user.id, msg, 'info')
 
 
 @bot.callback_query_handler(func=lambda x: re.search(r'b_([0-9])+', x.data) is not None)
@@ -102,6 +148,7 @@ def search_by_title(callback):
     page = int(page)
     if not books:
         bot.edit_message_text('Книги не найдены!', chat_id=msg.chat.id, message_id=msg.message_id)
+        track(msg.from_user.id, callback, 'search_by_title')
         return
     bot.send_chat_action(msg.chat.id, 'typing')
     if len(books) % ELEMENTS_ON_PAGE == 0:
@@ -118,6 +165,7 @@ def search_by_title(callback):
                               reply_markup=keyboard)
     else:
         bot.edit_message_text(msg_text, chat_id=msg.chat.id, message_id=msg.message_id, parse_mode='HTML')
+    track(msg.from_user.id, callback, 'search_by_title')
 
 
 @bot.callback_query_handler(func=lambda x: re.search(r'ba_([0-9])+', x.data) is not None)
@@ -143,6 +191,7 @@ def books_by_author(callback):
                               reply_markup=keyboard)
     else:
         bot.edit_message_text(msg_text, chat_id=msg.chat.id, message_id=msg.message_id, parse_mode='HTML')
+    track(msg.from_user.id, callback, 'books_by_author')
 
 
 @bot.callback_query_handler(func=lambda x: re.search(r'a_([0-9])+', x.data) is not None)
@@ -153,6 +202,7 @@ def search_by_authors(callback):
     page = int(page)
     if not authors:
         bot.send_message(msg.chat.id, 'Автор не найден!')
+        track(msg.from_user.id, callback, 'search_by_authors')
         return
     bot.send_chat_action(msg.chat.id, 'typing')
     if len(authors) % ELEMENTS_ON_PAGE == 0:
@@ -169,6 +219,7 @@ def search_by_authors(callback):
                               reply_markup=keyboard)
     else:
         bot.edit_message_text(msg_text, chat_id=msg.chat.id, message_id=msg.message_id, parse_mode='HTML')
+    track(msg.from_user.id, callback, 'search_by_authors')
 
 
 @bot.message_handler(regexp='/a_([0-9])+')
@@ -178,6 +229,7 @@ def books_by_author(msg):
     books = lib.book_by_author(id_)
     if not books:
         bot.reply_to(msg, 'Ошибка! Книги не найдены!')
+        track(msg.from_user.id, msg, 'books_by_author')
         return
     bot.send_chat_action(msg.chat.id, 'typing')
     if len(books) % ELEMENTS_ON_PAGE == 0:
@@ -193,6 +245,7 @@ def books_by_author(msg):
         bot.reply_to(msg, msg_text, parse_mode='HTML', reply_markup=keyboard)
     else:
         bot.reply_to(msg, msg_text, parse_mode='HTML')
+    track(msg.from_user.id, msg, 'books_by_author')
 
 
 @bot.message_handler(regexp='^/fb2_([0-9])+$')
@@ -221,6 +274,7 @@ def download_pdf(message):
 
 
 def download(msg, type_, book_id=None):
+    track(msg.from_user.id, msg, 'download')
     if not book_id:
         _, book_id = msg.text.split('_')
         book_id = int(book_id)
@@ -249,9 +303,12 @@ def download(msg, type_, book_id=None):
     caption = ''
     if book.author:
         if book.author.short:
-            filename += f'{book.author.short}_-_'.replace(' ', '_')
+            filename += f'{book.author.short}_-_'
             caption += book.author.normal_name
-    filename += f'{book.title}.{type_}'.replace(' ', '_').replace('/', '_').replace(',', '')
+    book_title = book.title.replace('.', '')
+    filename += f'{book_title}.{type_}'.replace(' ', '_').replace('/', '_').replace(',', '')  # todo
+    filename = filename.replace('«', '').replace('»', '').replace('"', '')  # todo
+    filename = filename.replace('(', '').replace(')', '').replace("'", '')  # todo
     filename = transliterate.translit(filename, 'ru', reversed=True)
     caption += '\n' + book.title
     with open(filename, 'wb') as f:
@@ -282,6 +339,7 @@ def download(msg, type_, book_id=None):
 
 @bot.inline_handler(func=lambda x: re.search(r'share_([0-9])+$', x.query) is not None)
 def inline_share(query):
+    track(query.from_user.id, query, 'share_book')
     _, book_id = query.query.split('_')
     result = list()
     book = lib.book_by_id(book_id)
@@ -289,27 +347,32 @@ def inline_share(query):
         return
     result.append(types.InlineQueryResultArticle('1', 'Поделиться',
                                                  types.InputTextMessageContent(book.to_share, parse_mode='HTML',
-                                                                               disable_web_page_preview=True)))
+                                                                               disable_web_page_preview=True),))
     bot.answer_inline_query(query.id, result)
 
 
 @bot.inline_handler(func=lambda query: query.query)
 def inline_hand(query):
+    track(query.from_user.id, query, 'inline_search')
     books = lib.book_by_title(query.query)
     if not books:
+        bot.answer_inline_query(query.id, [types.InlineQueryResultArticle('1', 'Книги не найдены!',
+                                           types.InputTextMessageContent('Книги не найдены!'))]
+                                )
         return
-    index = 1
+    book_index = 1
     result = list()
     for book in books[0:min(len(books)-1, 50-1)]:
-        result.append(types.InlineQueryResultArticle(str(index), book.title,
+        result.append(types.InlineQueryResultArticle(str(book_index), book.title,
                                                      types.InputTextMessageContent(book.to_share, parse_mode='HTML',
                                                                                    disable_web_page_preview=True)))
-        index += 1
+        book_index += 1
     bot.answer_inline_query(query.id, result)
 
 
 @bot.message_handler(func=lambda message: True)
 def search(msg):
+    track(msg.from_user.id, msg, 'receive_message')
     keyboard = types.InlineKeyboardMarkup()
     keyboard.add(types.InlineKeyboardButton('По названию', callback_data='b_1'),
                  types.InlineKeyboardButton('По авторам', callback_data='a_1')
@@ -319,7 +382,7 @@ def search(msg):
 
 bot.remove_webhook()
 
-time.sleep(0.5)
+time.sleep(0.3)
 
 bot.set_webhook(url=config.WEBHOOK_URL_BASE + config.WEBHOOK_URL_PATH,
                 certificate=open(config.WEBHOOK_SSL_CERT, 'r'))
@@ -328,4 +391,6 @@ bot.set_webhook(url=config.WEBHOOK_URL_BASE + config.WEBHOOK_URL_PATH,
 app.run(host=config.WEBHOOK_LISTEN,
         port=config.WEBHOOK_PORT,
         ssl_context=(config.WEBHOOK_SSL_CERT, config.WEBHOOK_SSL_PRIV),
-        debug=True)
+        debug=False)
+
+bot.remove_webhook()

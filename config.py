@@ -2,6 +2,10 @@
 TOKEN = ''
 
 
+# botan
+BOTAN_TOKEN = ''
+
+
 # webhook
 WEBHOOK_HOST = ''
 WEBHOOK_PORT = 443
@@ -14,8 +18,8 @@ WEBHOOK_URL_BASE = f"https://{WEBHOOK_HOST}:{WEBHOOK_PORT}"
 WEBHOOK_URL_PATH = f"/{TOKEN}/"
 
 # info
-VERSION = "2.2.0 (Beta)"
-DB_DATE = ""
+VERSION = "2.2.2"
+DB_DATE = "07.01.2017"
 
 
 # database
@@ -25,6 +29,6 @@ MYSQL_USER = ''
 MYSQL_PASSWORD = ''
 
 
-# TOR
+# tor
 PROXIES = {'http': 'socks5://127.0.0.1:9050',
            'https': 'socks5://127.0.0.1:9050'}
