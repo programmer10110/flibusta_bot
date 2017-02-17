@@ -1,5 +1,7 @@
 # bot
 TOKEN = ''
+DEBUG = False
+WEBHOOK = True
 
 
 # botan
@@ -18,8 +20,8 @@ WEBHOOK_URL_BASE = f"https://{WEBHOOK_HOST}:{WEBHOOK_PORT}"
 WEBHOOK_URL_PATH = f"/{TOKEN}/"
 
 # info
-VERSION = "2.2.2"
-DB_DATE = "07.01.2017"
+VERSION = "2.4.3"
+DB_DATE = "17.02.2017"
 
 
 # database
@@ -29,6 +31,19 @@ MYSQL_USER = ''
 MYSQL_PASSWORD = ''
 
 
+# users database
+USERS_DATABASE = ''
+
+
+# ftp_controller
+LIFE_TIME = 3600  # seconds
+FTP_DIR = './ftp'
+
+
+#time
+TIME_ZONE = 2
+
+
 # tor
-PROXIES = {'http': 'socks5://127.0.0.1:9050',
-           'https': 'socks5://127.0.0.1:9050'}
+PROXIES = {'http': 'localhost:8118',
+           'https': 'localhost:8118'}
