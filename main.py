@@ -97,12 +97,24 @@ def get_keyboard(page, pages, t):  # make keyboard for current page
         return None
     keyboard = types.InlineKeyboardMarkup()
     if page == 1:
-        keyboard.row(types.InlineKeyboardButton('>>>', callback_data=f'{t}_2'))
+        keyboard.row(types.InlineKeyboardButton('⏩', callback_data=f'{t}_2'))
+        if pages >= 7:
+            next_l = min(pages, page+ELEMENTS_ON_PAGE)
+            keyboard.row(types.InlineKeyboardButton(f'{next_l} ⏭', callback_data=f'{t}_{next_l}'))
     elif page == pages:
-        keyboard.row(types.InlineKeyboardButton('<<<', callback_data=f'{t}_{pages-1}'))
+        keyboard.row(types.InlineKeyboardButton('⏪', callback_data=f'{t}_{pages-1}'))
+        if pages >= 7:
+            previous_l = max(1, page-ELEMENTS_ON_PAGE)
+            keyboard.row(types.InlineKeyboardButton(f'⏮ {previous_l}', callback_data=f'{t}_{previous_l}'))
     else:
-        keyboard.row(types.InlineKeyboardButton('<<<', callback_data=f'{t}_{page-1}'),
-                     types.InlineKeyboardButton('>>>', callback_data=f'{t}_{page+1}'))
+        keyboard.row(types.InlineKeyboardButton('⏪', callback_data=f'{t}_{page-1}'),
+                     types.InlineKeyboardButton('⏩', callback_data=f'{t}_{page+1}'))
+        if pages >= 7:
+            next_l = min(pages, page + ELEMENTS_ON_PAGE)
+            previous_l = max(1, page - ELEMENTS_ON_PAGE)
+            keyboard.row(types.InlineKeyboardButton(f'⏮ {previous_l}', callback_data=f'{t}_{previous_l}'),
+                         types.InlineKeyboardButton(f'{next_l} ⏭', callback_data=f'{t}_{next_l}')
+                         )
     return keyboard
 
 
@@ -341,7 +353,8 @@ def download(msg, type_, book_id=None, file_id=None):  # download from flibusta 
             bot.send_document(msg.chat.id, file_id, reply_to_message_id=msg.message_id,
                               caption=caption, reply_markup=markup)
         except Exception as e:
-            print(e)
+            if config.DEBUG:
+                print(e)
         else:
             return
     try:
@@ -352,8 +365,8 @@ def download(msg, type_, book_id=None, file_id=None):  # download from flibusta 
     except requests.exceptions.ConnectionError as err:
         telebot.logger.exception(err)
         return
-    if '<!DOCTYPE html' in str(r.content[:100]):
-        try:
+    if '<!DOCTYPE html' in str(r.content[:100]):  # if bot get html file with error message
+        try:  # try download file from tor
             if type_ in ['fb2', 'epub', 'mobi']:
                 r = requests.get(f"http://flibustahezeous3.onion/b/{book_id}/{type_}",
                                  proxies=config.PROXIES)
@@ -364,14 +377,14 @@ def download(msg, type_, book_id=None, file_id=None):  # download from flibusta 
             telebot.logger.exception(err)
             bot.reply_to(msg, "Ошибка подключения к серверу! Попробуйте позднее.")
             return
-    if '<!DOCTYPE html' in str(r.content[:100]) or '<html>' in str(r.content[:100]):
-        bot.reply_to(msg, 'Ошибка!')
+    if '<!DOCTYPE html' in str(r.content[:100]) or '<html>' in str(r.content[:100]):  # send message to user when get
+        bot.reply_to(msg, 'Ошибка!')                                                  # html file
         return
     bot.send_chat_action(msg.chat.id, 'upload_document')
     filename = normalize(book, type_)
     with open(filename, 'wb') as f:
         f.write(r.content)
-    if type_ == 'fb2':
+    if type_ == 'fb2':  # if type "fb2" extract file from archive
         os.rename(filename, filename.replace('.fb2', '.zip'))
         try:
             zip_obj = zipfile.ZipFile(filename.replace('.fb2', '.zip'))
@@ -421,7 +434,7 @@ def download(msg, type_, book_id=None, file_id=None):  # download from flibusta 
 
 @bot.inline_handler(func=lambda x: re.search(r'share_([0-9])+$', x.query) is not None)
 @timeit
-def inline_share(query):
+def inline_share(query):  # share book to others user with use inline query
     track(query.from_user.id, query, 'share_book')
     _, book_id = query.query.split('_')
     result = list()

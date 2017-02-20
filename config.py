@@ -20,27 +20,28 @@ WEBHOOK_URL_BASE = f"https://{WEBHOOK_HOST}:{WEBHOOK_PORT}"
 WEBHOOK_URL_PATH = f"/{TOKEN}/"
 
 # info
-VERSION = "2.4.3"
-DB_DATE = "17.02.2017"
+VERSION = "2.4.4"
+DB_DATE = "18.02.2017"
 
 
 # database
-MYSQL_HOST = ''
-MYSQL_DATABASE = ''
+MYSQL_HOST = 'localhost'
+MYSQL_DATABASE = 'flibusta'
 MYSQL_USER = ''
 MYSQL_PASSWORD = ''
 
 
 # users database
-USERS_DATABASE = ''
+USERS_DATABASE = 'flibusta_users'
 
 
 # ftp_controller
+#   USE_FTP = True
 LIFE_TIME = 3600  # seconds
 FTP_DIR = './ftp'
 
 
-#time
+# time
 TIME_ZONE = 2
 
 

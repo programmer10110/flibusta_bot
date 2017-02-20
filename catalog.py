@@ -148,6 +148,7 @@ class Library:
         except pymysql.Error as err:
             if config.DEBUG:
                 print(f"fetchone {time.strftime('%H:%M:%S')} {err}")
+            self.conn.ping(reconnect=True)
             return None
 
     def fetchall(self, sql, args):
@@ -159,6 +160,7 @@ class Library:
         except pymysql.Error as err:
             if config.DEBUG:
                 print(f"{time.strftime('%H:%M:%S')} {err}")
+            self.conn.ping(reconnect=True)
             return None
 
     def good_author_id(self, id_):

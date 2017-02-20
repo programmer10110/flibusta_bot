@@ -27,6 +27,7 @@ class Database:
                 cursor.execute(sql, args)
                 return cursor.fetchone()
         except pymysql.Error as err:
+            self.conn.ping(reconnect=True)
             if config.DEBUG:
                 print(f"fetchone {time.strftime('%H:%M:%S')} {err}")
             return None
@@ -37,6 +38,7 @@ class Database:
                 cursor.execute(sql, args)
                 return cursor.fetchall()
         except pymysql.Error as err:
+            self.conn.ping(reconnect=True)
             if config.DEBUG:
                 print(f"{time.strftime('%H:%M:%S')} {err}")
             return None
@@ -48,6 +50,7 @@ class Database:
                                (user_id, 0, 0))
             self.conn.commit()
         except pymysql.Error as e:
+            self.conn.ping(reconnect=True)
             if config.DEBUG:
                 print(e)
 
@@ -62,6 +65,7 @@ class Database:
                                    (status, user_id))
             self.conn.commit()
         except pymysql.Error as e:
+            self.conn.ping(reconnect=True)
             if config.DEBUG:
                 print(e)
 
@@ -69,6 +73,7 @@ class Database:
         try:
             res = self.fetchone("SELECT allow_uk, allow_be FROM settings WHERE user_id=%s", (user_id,))
         except pymysql.Error as e:
+            self.conn.ping(reconnect=True)
             if config.DEBUG:
                 print(e)
             return {'allow_uk': 0, 'allow_be': 0}
