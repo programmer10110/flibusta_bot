@@ -31,10 +31,12 @@ bot = telebot.TeleBot(config.TOKEN)
 lib = Library()
 db = Database()
 
+logger = telebot.logger
+
 if config.DEBUG:
-    telebot.logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG)
 else:
-    telebot.logger.setLevel(logging.INFO)
+    logger.setLevel(logging.INFO)
 
 
 def track(uid, msg, name):  # botan tracker
@@ -84,11 +86,11 @@ def normalize(book, type_):  # remove chars that don't accept in Telegram Bot AP
         if book.author.short:
             filename += book.author.short + '_-_'
     filename += book.title
-    filename = filename.replace('(', '').replace(')', '').replace(' ', '_').replace('–', '-')
-    filename = filename.replace('/', '_').replace(',', '').replace('«', '').replace('№', 'N')
-    filename = filename.replace('»', '').replace('"', '').replace('…', '').replace('—', '-')
-    filename = transliterate.translit(filename, 'ru', reversed=True).replace("'", '').replace(' ', '_').replace('.', '')
-    filename = filename.replace(' ', '_').replace('’', '').replace('!', '').replace('?', '')
+    filename = transliterate.translit(filename, 'ru', reversed=True)
+    filename = filename.strip('(').strip(')').strip(',').strip('«').strip('…').strip('.')
+    filename = filename.strip('’').strip('!').strip('"').strip('?').strip('»').strip("'")
+    filename = filename.replace('—', '-').replace('/', '_').replace('№', 'N')
+    filename = filename.replace(' ', '_').replace('–', '-')
     return filename + '.' + type_
 
 
@@ -100,20 +102,24 @@ def get_keyboard(page, pages, t):  # make keyboard for current page
         keyboard.row(types.InlineKeyboardButton('⏩', callback_data=f'{t}_2'))
         if pages >= 7:
             next_l = min(pages, page+ELEMENTS_ON_PAGE)
-            keyboard.row(types.InlineKeyboardButton(f'{next_l} ⏭', callback_data=f'{t}_{next_l}'))
+            keyboard.row(types.InlineKeyboardButton(f'{next_l} ⏭',
+                                                    callback_data=f'{t}_{next_l}'))
     elif page == pages:
         keyboard.row(types.InlineKeyboardButton('⏪', callback_data=f'{t}_{pages-1}'))
         if pages >= 7:
             previous_l = max(1, page-ELEMENTS_ON_PAGE)
-            keyboard.row(types.InlineKeyboardButton(f'⏮ {previous_l}', callback_data=f'{t}_{previous_l}'))
+            keyboard.row(types.InlineKeyboardButton(f'⏮ {previous_l}',
+                                                    callback_data=f'{t}_{previous_l}'))
     else:
         keyboard.row(types.InlineKeyboardButton('⏪', callback_data=f'{t}_{page-1}'),
                      types.InlineKeyboardButton('⏩', callback_data=f'{t}_{page+1}'))
         if pages >= 7:
             next_l = min(pages, page + ELEMENTS_ON_PAGE)
             previous_l = max(1, page - ELEMENTS_ON_PAGE)
-            keyboard.row(types.InlineKeyboardButton(f'⏮ {previous_l}', callback_data=f'{t}_{previous_l}'),
-                         types.InlineKeyboardButton(f'{next_l} ⏭', callback_data=f'{t}_{next_l}')
+            keyboard.row(types.InlineKeyboardButton(f'⏮ {previous_l}',
+                                                    callback_data=f'{t}_{previous_l}'),
+                         types.InlineKeyboardButton(f'{next_l} ⏭',
+                                                    callback_data=f'{t}_{next_l}')
                          )
     return keyboard
 
@@ -126,12 +132,13 @@ def start(msg):
         start_msg = ("Привет!\n"
                      "Этот бот поможет тебе загружать книги с флибусты.\n"
                      "Набери /help что бы получить помощь.\n"
-                     "Информация о боте /info.\n")
+                     "Информация о боте /info.\n"
+                     "Материальная помощь /donate\n")
         bot.reply_to(msg, start_msg)
         track(msg.from_user.id, msg, 'start')
     else:
         type_, id_ = rq.split('_')
-        download(msg, type_, book_id=int(id_))
+        send_book(msg, type_, book_id=int(id_))
         track(msg.from_user.id, msg, 'get_shared_book')
 
 
@@ -277,7 +284,7 @@ def books_by_author(msg):  # search books by author (use messages)
     track(msg.from_user.id, msg, 'books_by_author')
 
 
-@bot.message_handler(commands=['donation'])
+@bot.message_handler(commands=['donate'])
 def donation(msg):  # send donation information
     text = "О том, как поддержать проект можно узнать "
     text += '<a href="http://telegra.ph/Pozhertvovaniya-02-11">тут</a>.'
@@ -285,33 +292,33 @@ def donation(msg):  # send donation information
 
 
 @bot.message_handler(regexp='^/fb2_([0-9])+$')
-def download_fb2(message):  # fb2 books handler
-    return download(message, 'fb2')
+def send_fb2(message):  # fb2 books handler
+    return send_book(message, 'fb2')
 
 
 @bot.message_handler(regexp='^/epub_([0-9])+$')
-def download_epub(message):  # epub books handler
-    return download(message, 'epub')
+def send_epub(message):  # epub books handler
+    return send_book(message, 'epub')
 
 
 @bot.message_handler(regexp='^/mobi_([0-9])+$')
-def download_mobi(message):  # mobi books handler
-    return download(message, 'mobi')
+def send_mobi(message):  # mobi books handler
+    return send_book(message, 'mobi')
 
 
 @bot.message_handler(regexp='^/djvu_([0-9])+$')
-def download_djvu(message):  # dhvu books handler
-    return download(message, 'djvu')
+def send_djvu(message):  # djvu books handler
+    return send_book(message, 'djvu')
 
 
 @bot.message_handler(regexp='^/pdf_([0-9])+$')
-def download_pdf(message):  # pdf books handler
-    return download(message, 'pdf')
+def send_pdf(message):  # pdf books handler
+    return send_book(message, 'pdf')
 
 
 @bot.message_handler(regexp='^/doc_([0-9])+$')
-def download_pdf(message):  # doc books handler
-    return download(message, 'doc')
+def send_doc(message):  # doc books handler
+    return send_book(message, 'doc')
 
 
 def send_by_file_id(foo):  # try to send document by file_id
@@ -328,9 +335,36 @@ def send_by_file_id(foo):  # try to send document by file_id
     return try_send
 
 
+def download(type_, book_id, msg):
+    try:
+        if type_ in ['fb2', 'epub', 'mobi']:
+            r = requests.get(f"http://flibusta.is/b/{book_id}/{type_}")
+        else:
+            r = requests.get(f"http://flibusta.is/b/{book_id}/download")
+    except requests.exceptions.ConnectionError as err:
+        telebot.logger.exception(err)
+        return None
+    if '<!DOCTYPE html' in str(r.content[:100]):  # if bot get html file with error message
+        try:  # try download file from tor
+            if type_ in ['fb2', 'epub', 'mobi']:
+                r = requests.get(f"http://flibustahezeous3.onion/b/{book_id}/{type_}",
+                                 proxies=config.PROXIES)
+            else:
+                r = requests.get(f"http://flibustahezeous3.onion/b/{book_id}/download",
+                                 proxies=config.PROXIES)
+        except requests.exceptions.ConnectionError as err:
+            telebot.logger.exception(err)
+            bot.reply_to(msg, "Ошибка подключения к серверу! Попробуйте позднее.")
+            return None
+    if '<!DOCTYPE html' in str(r.content[:100]) or '<html>' in str(r.content[:100]):  # send message to user when get
+        bot.reply_to(msg, 'Ошибка!')                                                  # html file
+        return None
+    return r
+
+
 @timeit
 @send_by_file_id
-def download(msg, type_, book_id=None, file_id=None):  # download from flibusta server and send document to user
+def send_book(msg, type_, book_id=None, file_id=None):  # download from flibusta server and send document to user
     track(msg.from_user.id, msg, 'download')
     if not book_id:
         _, book_id = msg.text.split('_')
@@ -352,33 +386,12 @@ def download(msg, type_, book_id=None, file_id=None):  # download from flibusta 
         try:
             bot.send_document(msg.chat.id, file_id, reply_to_message_id=msg.message_id,
                               caption=caption, reply_markup=markup)
-        except Exception as e:
-            if config.DEBUG:
-                print(e)
+        except Exception as err:
+            logger.debug(err)
         else:
             return
-    try:
-        if type_ in ['fb2', 'epub', 'mobi']:
-            r = requests.get(f"http://flibusta.is/b/{book_id}/{type_}")
-        else:
-            r = requests.get(f"http://flibusta.is/b/{book_id}/download")
-    except requests.exceptions.ConnectionError as err:
-        telebot.logger.exception(err)
-        return
-    if '<!DOCTYPE html' in str(r.content[:100]):  # if bot get html file with error message
-        try:  # try download file from tor
-            if type_ in ['fb2', 'epub', 'mobi']:
-                r = requests.get(f"http://flibustahezeous3.onion/b/{book_id}/{type_}",
-                                 proxies=config.PROXIES)
-            else:
-                r = requests.get(f"http://flibustahezeous3.onion/b/{book_id}/download",
-                                 proxies=config.PROXIES)
-        except requests.exceptions.ConnectionError as err:
-            telebot.logger.exception(err)
-            bot.reply_to(msg, "Ошибка подключения к серверу! Попробуйте позднее.")
-            return
-    if '<!DOCTYPE html' in str(r.content[:100]) or '<html>' in str(r.content[:100]):  # send message to user when get
-        bot.reply_to(msg, 'Ошибка!')                                                  # html file
+    r = download(type_, book_id, msg)
+    if not r:
         return
     bot.send_chat_action(msg.chat.id, 'upload_document')
     filename = normalize(book, type_)
@@ -389,8 +402,7 @@ def download(msg, type_, book_id=None, file_id=None):  # download from flibusta 
         try:
             zip_obj = zipfile.ZipFile(filename.replace('.fb2', '.zip'))
         except zipfile.BadZipFile as err:
-            if config.DEBUG:
-                print(err)
+            logger.debug(err)
             return
         extracted = zip_obj.namelist()[0]
         zip_obj.extract(extracted)
@@ -402,9 +414,8 @@ def download(msg, type_, book_id=None, file_id=None):  # download from flibusta 
         try:
             res = bot.send_document(msg.chat.id, open(filename, 'rb'), reply_to_message_id=msg.message_id,
                                     caption=caption, reply_markup=markup)
-        except requests.ConnectionError as e:
-            if config.DEBUG:
-                print(e)
+        except requests.ConnectionError as err:
+            logger.debug(err)
         else:
             lib.set_file_id(book_id, res.document.file_id, type_)
             try:
@@ -449,7 +460,7 @@ def inline_share(query):  # share book to others user with use inline query
 
 @bot.inline_handler(func=lambda query: query.query)
 @timeit
-def inline_hand(query):
+def inline_hand(query):  # inline search
     track(query.from_user.id, query, 'inline_search')
     user_sets = db.get_lang_settings(query.from_user.id)
     books = lib.book_by_title(query.query, user_sets)
@@ -470,7 +481,7 @@ def inline_hand(query):
 
 
 @bot.message_handler(commands=['settings'])
-def settings(msg):
+def settings(msg):  # send settings message
     user_set = db.get_lang_settings(msg.from_user.id)
     text = 'Настройки: '
     keyboard = types.InlineKeyboardMarkup()
@@ -486,7 +497,7 @@ def settings(msg):
 
 
 @bot.callback_query_handler(func=lambda x: re.search(r'^(uk|be)_(on|off)$', x.data) is not None)
-def lang_setup(query):
+def lang_setup(query):  # language settings
     lang, set_ = query.data.split('_')
     if set_ == 'on':
         db.set_land_settings(query.from_user.id, lang, 1)
@@ -517,30 +528,9 @@ def update_file_link(query):
     lib.set_life_time(filename)
 
     if filename not in os.listdir(config.FTP_DIR):
-        try:
-            if type_ in ['fb2', 'epub', 'mobi']:
-                r = requests.get(f"http://flibusta.is/b/{book_id}/{type_}")
-            else:
-                r = requests.get(f"http://flibusta.is/b/{book_id}/download")
-        except requests.exceptions.ConnectionError as err:
-            telebot.logger.exception(err)
+        r = download(type_, book_id, msg)
+        if not r:
             return
-        if '<!DOCTYPE html' in str(r.content[:100]):
-            try:
-                if type_ in ['fb2', 'epub', 'mobi']:
-                    r = requests.get(f"http://flibustahezeous3.onion/b/{book_id}/{type_}",
-                                     proxies=config.PROXIES)
-                else:
-                    r = requests.get(f"http://flibustahezeous3.onion/b/{book_id}/download",
-                                     proxies=config.PROXIES)
-            except requests.exceptions.ConnectionError as err:
-                telebot.logger.exception(err)
-                bot.reply_to(msg, "Ошибка подключения к серверу! Попробуйте позднее.")
-                return
-        if '<!DOCTYPE html' in str(r.content[:100]) or '<html>' in str(r.content[:100]):
-            bot.reply_to(msg, 'Ошибка!')
-            return
-
         with open(filename, 'wb') as f:
             f.write(r.content)
         if type_ == 'fb2':
@@ -548,8 +538,7 @@ def update_file_link(query):
             try:
                 zip_obj = zipfile.ZipFile(filename.replace('.fb2', '.zip'))
             except zipfile.BadZipFile as err:
-                if config.DEBUG:
-                    print(err)
+                logger.debug(err)
                 return
             extracted = zip_obj.namelist()[0]
             zip_obj.extract(extracted)
@@ -624,4 +613,5 @@ if config.WEBHOOK:
 else:
     bot.polling()
 
+print('Closing ftp controller...')
 ftp.stop()

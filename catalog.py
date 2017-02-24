@@ -1,6 +1,7 @@
 import pymysql
 import time
 import datetime
+from telebot import logger
 
 import config
 
@@ -83,6 +84,7 @@ class Book:
                           f'⬇ epub: <a href="{url}epub_{self.id_}">/epub_{self.id_}</a>\n'
                           f'⬇ mobi: <a href="{url}mobi_{self.id_}">/mobi_{self.id_}</a>\n')
         else:
+            self.file_type = self.file_type.lower
             return res + (f'⬇ {self.file_type}: <a href="{url}{self.file_type}_{self.id_}">'
                           f'/{self.file_type}_{self.id_}</a>\n')
 
@@ -100,7 +102,7 @@ def for_search(arg):
 
 def sort_by_alphabet(obj):
     if obj.title:
-        return obj.title.replace('«', '').replace('»', '')
+        return obj.title.strip('«').strip('»')
     else:
         return None
 
@@ -135,7 +137,7 @@ class Library:
                                             password=config.MYSQL_PASSWORD,
                                             charset='utf8mb4')
             except pymysql.Error as err:
-                print(f"{time.strftime('%H:%M:%S')} {err}")
+                logger.debug(err)
             else:
                 return
 
@@ -146,8 +148,7 @@ class Library:
                 res = cursor.fetchone()
             return res
         except pymysql.Error as err:
-            if config.DEBUG:
-                print(f"fetchone {time.strftime('%H:%M:%S')} {err}")
+            logger.debug(err)
             self.conn.ping(reconnect=True)
             return None
 
@@ -158,16 +159,15 @@ class Library:
                 res = cursor.fetchall()
             return res
         except pymysql.Error as err:
-            if config.DEBUG:
-                print(f"{time.strftime('%H:%M:%S')} {err}")
+            logger.debug(err)
             self.conn.ping(reconnect=True)
             return None
 
     def good_author_id(self, id_):
         result = self.fetchall(
-            "SELECT * FROM libavtoraliase WHERE BadId=%s", (id_,)
+            "SELECT * FROM libavtoraliase WHERE BadId=%s;", (id_,)
         )
-        if result and not isinstance(result, pymysql.Error):
+        if result:
             return False
         else:
             return True
@@ -196,7 +196,7 @@ class Library:
                              )
 
     def author_by_id(self, id_):
-        author_id = self.fetchone("SELECT AvtorId FROM libavtor WHERE BookId=%s", (id_,))
+        author_id = self.fetchone("SELECT AvtorId FROM libavtor WHERE BookId=%s;", (id_,))
         if author_id:
             author = self.fetchone(
                 ("SELECT LastName, FirstName, MiddleName "
@@ -210,7 +210,7 @@ class Library:
     def book_by_id(self, id_):
         book = self.fetchall(
             ("SELECT Title, Title1, Lang, BookId, FileType "
-             "FROM libbook WHERE BookId=%s"), (id_,)
+             "FROM libbook WHERE BookId=%s;"), (id_,)
         )
         if book:
             book = book[0]
@@ -263,7 +263,8 @@ class Library:
         return None
 
     def get_file_id(self, book_id, type_):
-        file_id = self.fetchone('SELECT file_id FROM fileids WHERE book_id=%s && file_type=%s', (book_id, type_))
+        file_id = self.fetchone('SELECT file_id FROM fileids WHERE book_id=%s && file_type=%s',
+                                (book_id, type_))
         if file_id:
             return file_id[0]
         else:
@@ -279,9 +280,8 @@ class Library:
                     cursor.execute('UPDATE fileids SET file_id=%s WHERE book_id=%s && file_type=%s',
                                    (file_id, book_id, type_))
                 self.conn.commit()
-        except pymysql.Error as e:
-            if config.DEBUG:
-                print(e)
+        except pymysql.Error as err:
+            logger.debug(err)
 
     def get_file_size(self, book_id):
         size = self.fetchone('SELECT FileSize FROM libbook WHERE BookId=%s', (book_id,))
@@ -309,17 +309,16 @@ class Library:
                     cursor.execute('INSERT INTO fileLifeTime (filename, time) VALUES (%s, %s)',
                                    (filename, time_))
                 self.conn.commit()
-            except pymysql.Error as e:
-                if config.DEBUG:
-                    print(e)
+            except pymysql.Error as err:
+                logger.debug(err)
 
     def update_life_time(self, filename):
         dt = datetime.datetime.fromtimestamp(time.time() + config.LIFE_TIME)
         time_ = dt.strftime('%Y-%m-%d %H:%M:%S')
         try:
             with self.conn.cursor() as cursor:
-                x = cursor.execute("UPDATE fileLifeTime SET time=%s WHERE filename=%s", (time_, filename))
+                x = cursor.execute("UPDATE fileLifeTime SET time=%s WHERE filename=%s",
+                                   (time_, filename))
             self.conn.commit()
-        except pymysql.Error as e:
-            if config.DEBUG:
-                print(e)
+        except pymysql.Error as err:
+            logger.debug(err)
