@@ -1,6 +1,7 @@
-import mysql.connector  # https://github.com/sanpingz/mysql-connector
-from mysql.connector import Error
+import pymysql
 import time
+import datetime
+from telebot import logger
 
 import config
 
@@ -23,6 +24,7 @@ class Author:
             temp += self.first_name
         if self.middle_name:
             if temp:
+                
                 temp += " "
             temp += self.middle_name
         if temp:
@@ -82,6 +84,7 @@ class Book:
                           f'⬇ epub: <a href="{url}epub_{self.id_}">/epub_{self.id_}</a>\n'
                           f'⬇ mobi: <a href="{url}mobi_{self.id_}">/mobi_{self.id_}</a>\n')
         else:
+            self.file_type = self.file_type.lower
             return res + (f'⬇ {self.file_type}: <a href="{url}{self.file_type}_{self.id_}">'
                           f'/{self.file_type}_{self.id_}</a>\n')
 
@@ -99,9 +102,22 @@ def for_search(arg):
 
 def sort_by_alphabet(obj):
     if obj.title:
-        return obj.title.replace('«', '').replace('»', '')
+        return obj.title.strip('«').strip('»')
     else:
         return None
+
+
+def lang_filter(books, lang_sets):
+    langs = ['ru']
+    for key in lang_sets.keys():
+        if lang_sets[key]:
+            _, lang = key.split('_')
+            langs.append(lang)
+    res = []
+    for book in books:
+        if book.lang in langs:
+            res.append(book)
+    return res
 
 
 class Library:
@@ -109,54 +125,49 @@ class Library:
         self.conn = None
         self.__connect()
 
+    def __del__(self):
+        self.conn.close()
+
     def __connect(self):
         while True:
             try:
-                self.conn = mysql.connector.connect(host=config.MYSQL_HOST,
-                                                    database=config.MYSQL_DATABASE,
-                                                    user=config.MYSQL_USER,
-                                                    password=config.MYSQL_PASSWORD)
-            except Error as err:
-                print(f"{time.strftime('%H:%M:%S')} {err}")
+                self.conn = pymysql.connect(host=config.MYSQL_HOST,
+                                            database=config.MYSQL_DATABASE,
+                                            user=config.MYSQL_USER,
+                                            password=config.MYSQL_PASSWORD,
+                                            charset='utf8mb4')
+            except pymysql.Error as err:
+                logger.debug(err)
             else:
                 return
 
-    def __get_cursor(self):
-        try:
-            return self.conn.cursor()
-        except Error as err:
-            print(f"{time.strftime('%H:%M:%S')} {err}")
-            self.__connect()
-            return self.conn.cursor(buffered=True)
-
     def fetchone(self, sql, args):
-        cursor = self.__get_cursor()
         try:
-            cursor.execute(sql, args)
-            return cursor.fetchone()
-        except Error as err:
-            print(f"{time.strftime('%H:%M:%S')} {err}")
+            with self.conn.cursor() as cursor:
+                cursor.execute(sql, args)
+                res = cursor.fetchone()
+            return res
+        except pymysql.Error as err:
+            logger.debug(err)
+            self.conn.ping(reconnect=True)
             return None
 
     def fetchall(self, sql, args):
-        cursor = self.__get_cursor()
         try:
-            cursor.execute(sql, args)
-            return cursor.fetchall()
-        except Error as err:
-            print(f"{time.strftime('%H:%M:%S')} {err}")
+            with self.conn.cursor() as cursor:
+                cursor.execute(sql, args)
+                res = cursor.fetchall()
+            return res
+        except pymysql.Error as err:
+            logger.debug(err)
+            self.conn.ping(reconnect=True)
             return None
-        finally:
-            try:
-                cursor.close()
-            except ReferenceError as err:
-                print(f"{time.strftime('%H:%M:%S')} {err}")
 
     def good_author_id(self, id_):
         result = self.fetchall(
-            "SELECT * FROM libavtoraliase WHERE BadId=%s", (id_,)
+            "SELECT * FROM libavtoraliase WHERE BadId=%s;", (id_,)
         )
-        if result and not isinstance(result, Error):
+        if result:
             return False
         else:
             return True
@@ -185,7 +196,7 @@ class Library:
                              )
 
     def author_by_id(self, id_):
-        author_id = self.fetchone("SELECT AvtorId FROM libavtor WHERE BookId=%s", (id_,))
+        author_id = self.fetchone("SELECT AvtorId FROM libavtor WHERE BookId=%s;", (id_,))
         if author_id:
             author = self.fetchone(
                 ("SELECT LastName, FirstName, MiddleName "
@@ -199,7 +210,7 @@ class Library:
     def book_by_id(self, id_):
         book = self.fetchall(
             ("SELECT Title, Title1, Lang, BookId, FileType "
-             "FROM libbook WHERE BookId=%s"), (id_,)
+             "FROM libbook WHERE BookId=%s;"), (id_,)
         )
         if book:
             book = book[0]
@@ -208,7 +219,7 @@ class Library:
         else:
             return None
 
-    def book_by_author(self, id_):
+    def book_by_author(self, id_, lang_sets):
         book_ids = self.fetchall(
             'SELECT BookId FROM libavtor WHERE AvtorId=%s;', (id_,)
         )
@@ -219,21 +230,21 @@ class Library:
                 if book:
                     books.append(book)
             if books:
-                return sorted(books, key=sort_by_alphabet)
-            else:
-                return None
-        else:
-            return None
+                books = lang_filter(books, lang_sets)
+                if books:
+                    return sorted(books, key=sort_by_alphabet)
+        return None
 
-    def book_by_title(self, title):
+    def book_by_title(self, title, lang_sets):
         books = self.fetchall(
             ("SELECT Title, Title1, Lang, BookId, FileType FROM libbook WHERE "
              'MATCH (Title) AGAINST (%s IN BOOLEAN MODE)'), (for_search(title),)
         )
         if books:
-            return self.__add_author_info(books)
-        else:
-            return None
+            books = lang_filter(self.__add_author_info(books), lang_sets)
+            if books:
+                return books
+        return None
 
     def author_by_name(self, author):
         row = self.fetchall(("SELECT AvtorId, FirstName, MiddleName, LastName "
@@ -249,7 +260,65 @@ class Library:
                     res.append(author)
             if res:
                 return res
-            else:
-                return None
+        return None
+
+    def get_file_id(self, book_id, type_):
+        file_id = self.fetchone('SELECT file_id FROM fileids WHERE book_id=%s && file_type=%s',
+                                (book_id, type_))
+        if file_id:
+            return file_id[0]
         else:
             return None
+
+    def set_file_id(self, book_id, file_id, type_):
+        try:
+            with self.conn.cursor() as cursor:
+                if not self.get_file_id(book_id, type_):
+                    cursor.execute('INSERT INTO fileids (book_id, file_type, file_id) VALUES (%s, %s, %s)',
+                                   (book_id, type_, file_id))
+                else:
+                    cursor.execute('UPDATE fileids SET file_id=%s WHERE book_id=%s && file_type=%s',
+                                   (file_id, book_id, type_))
+                self.conn.commit()
+        except pymysql.Error as err:
+            logger.debug(err)
+
+    def get_file_size(self, book_id):
+        size = self.fetchone('SELECT FileSize FROM libbook WHERE BookId=%s', (book_id,))
+        if size:
+            return size[0]
+        else:
+            return 0
+
+    def get_life_time(self, filename):
+        life_time = self.fetchone('SELECT time FROM fileLifeTime WHERE filename=%s', (filename,))
+        if life_time:
+            return life_time[0]
+        else:
+            return None
+
+    def set_life_time(self, filename):
+        life_time = self.get_life_time(filename)
+        if life_time:
+            self.update_life_time(filename)
+        else:
+            dt = datetime.datetime.fromtimestamp(time.time() + config.LIFE_TIME)
+            time_ = dt.strftime('%Y-%m-%d %H:%M:%S')
+            try:
+                with self.conn.cursor() as cursor:
+                    cursor.execute('INSERT INTO fileLifeTime (filename, time) VALUES (%s, %s)',
+                                   (filename, time_))
+                self.conn.commit()
+            except pymysql.Error as err:
+                logger.debug(err)
+
+    def update_life_time(self, filename):
+        dt = datetime.datetime.fromtimestamp(time.time() + config.LIFE_TIME)
+        time_ = dt.strftime('%Y-%m-%d %H:%M:%S')
+        try:
+            with self.conn.cursor() as cursor:
+                x = cursor.execute("UPDATE fileLifeTime SET time=%s WHERE filename=%s",
+                                   (time_, filename))
+            self.conn.commit()
+        except pymysql.Error as err:
+            logger.debug(err)

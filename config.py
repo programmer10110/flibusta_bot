@@ -1,5 +1,7 @@
 # bot
 TOKEN = ''
+DEBUG = False
+WEBHOOK = True
 
 
 # botan
@@ -18,17 +20,31 @@ WEBHOOK_URL_BASE = f"https://{WEBHOOK_HOST}:{WEBHOOK_PORT}"
 WEBHOOK_URL_PATH = f"/{TOKEN}/"
 
 # info
-VERSION = "2.2.2"
-DB_DATE = "07.01.2017"
+VERSION = "2.4.5"
+DB_DATE = "18.02.2017"
 
 
 # database
-MYSQL_HOST = ''
-MYSQL_DATABASE = ''
+MYSQL_HOST = 'localhost'
+MYSQL_DATABASE = 'flibusta'
 MYSQL_USER = ''
 MYSQL_PASSWORD = ''
 
 
+# users database
+USERS_DATABASE = 'flibusta_users'
+
+
+# ftp_controller
+#   USE_FTP = True
+LIFE_TIME = 3600  # seconds
+FTP_DIR = './ftp'
+
+
+# time
+TIME_ZONE = 2
+
+
 # tor
-PROXIES = {'http': 'socks5://127.0.0.1:9050',
-           'https': 'socks5://127.0.0.1:9050'}
+PROXIES = {'http': 'localhost:8118',
+           'https': 'localhost:8118'}
